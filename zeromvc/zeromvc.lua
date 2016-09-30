@@ -3,6 +3,9 @@
 -- zeromvc lua 1.0.1 修改 pool.del 后数组少遍历一次
 -- zeromvc lua 1.0.2 使用... 创建 command
 -- zeromvc lua 1.0.3 getProxy 同一文件夹下可使用短地址 className 改 classPath
+-- zeromvc lua 1.0.4 添加 hideSelf
+-- zeromvc lua 1.0.5 添加 stage ,data
+-- zeromvc lua 1.0.6 123 classPath 改 classPath or type
 
 -- 创建lua类------------------------------------------------------------------------------------------- createClass
 local classPool = {}
@@ -117,7 +120,7 @@ function Observer:addListener(type, classPath, methodName)
     if self.pool[type] == nil then
         self.pool[type] = Pool:new()
     end
-    self.pool[type]:add(classPath, methodName or "execute")
+    self.pool[type]:add(classPath or type, methodName or "execute")
 end
 
 --移除监听
@@ -157,24 +160,24 @@ function Observer:notify(key, ...)
     local methods = self.pool[key]
     assert(type(key) == "string", "notify 第一个参数格式不对.不应该为" .. type(key))
     if methods == nil then
-        -------------------------------------------------------------------------------- 不兼容删除
-        local loaded, loadObserver = pcall(require, key)
-        if loaded then
-            print("使用强加载:" .. key.."不建议使用这个方法 请修改------------------------------------------")
-            --这里好像可以优化
-            self:addListener(key, loadObserver.classPath)
-            methods = self.pool[key]
-            if methods ~= nil then
-                for k, v in pairs(self.pool[key].list) do
-                    self:callSingle(key, v, methods.date[v], ...)
-                    happen = happen + 1
-                end
-            end
-        end
-        if methods == nil then
-            print("Observer " .. key .. " 命令未定义")
-        end
-        -------------------------------------------------------------------------------- 不兼容删除
+--        -------------------------------------------------------------------------------- 不兼容删除
+--        local loaded, loadObserver = pcall(require, key)
+--        if loaded then
+--            print("使用强加载:" .. key.."不建议使用这个方法 请修改------------------------------------------")
+--            --这里好像可以优化
+--            self:addListener(key, loadObserver.classPath)
+--            methods = self.pool[key]
+--            if methods ~= nil then
+--                for k, v in pairs(self.pool[key].list) do
+--                    self:callSingle(key, v, methods.date[v], ...)
+--                    happen = happen + 1
+--                end
+--            end
+--        end
+--        if methods == nil then
+--            print("Observer " .. key .. " 命令未定义")
+--        end
+--        -------------------------------------------------------------------------------- 不兼容删除
     else
         for k, v in pairs(methods.list) do
             self:callSingle(key, v, methods.date[v], ...)
@@ -210,7 +213,9 @@ local Zero = createClass("Zero")
 Zero.model = nil
 Zero.view = nil
 Zero.control = nil
-function Zero:ctor(prototype)
+function Zero:ctor(prototype,stage,data)
+    self.stage=stage
+    self.data=data or {}
     self.model = {}
     self.view = Observer:new(self)
     self.control = Observer:new(self)
@@ -280,7 +285,7 @@ function Zero:getProxy(proxyPath)
     if proxy == nil then
         local ProxyFile = getClass(proxyPath)
         if ProxyFile ~= nil then
-            proxy = ProxyFile:new()
+            proxy = ProxyFile:new(self)
             self.model[proxy.classPath] = proxy
         end
     end
@@ -332,6 +337,7 @@ function Mediator:ctor(prototype, zero, mediatorKey)
     self._isShow = false
     setmetatable(self._pool, { __mode = "k" });
     self.zero = zero
+    self.stage = zero.stage
     self.mediatorKey = mediatorKey
     --    if self.init ~= nil then
     --        self:init()
@@ -362,6 +368,10 @@ function Mediator:_hide(...)
             self:removeProxy(proxy)
         end
     end
+end
+--删除视图自己
+function Mediator:hideSelf()
+    self.zero.view:notify(self.key, "_hide")
 end
 
 --添加关心数据
@@ -412,8 +422,10 @@ end
 
 -- 数据--------------------------------------------------------------------------------------------- Proxy
 local Proxy = createClass("Proxy")
-function Proxy:ctor(prototype)
+function Proxy:ctor(prototype,zero)
     self._pool = {}
+    self.zero = zero
+    self.data = self.zero.data
     setmetatable(self._pool, { __mode = "k" });
     if self.init ~= nil then
         self:init()
